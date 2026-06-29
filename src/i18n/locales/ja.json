@@ -1292,6 +1292,8 @@
     "catalogColumnDisplay": "メニュー表示名",
     "catalogColumnModel": "実際のリクエストモデル",
     "catalogColumnContext": "コンテキストウィンドウ",
+    "modelCatalogFastMode": "FAST mode",
+    "modelCatalogFastModeHint": "有効にすると、このモデルは Codex モデルカタログで fast/priority サービス層を宣言します。上流が対応している場合のみ使用してください。",
     "reasoningModeToggle": "思考モードに対応",
     "reasoningModeHint": "上流の Chat Completions API が思考（thinking）のオン/オフ切り替えに対応している場合に有効化します。Kimi、GLM、Qwen などが通常このタイプに該当します。",
     "reasoningEffortToggle": "思考レベルに対応",

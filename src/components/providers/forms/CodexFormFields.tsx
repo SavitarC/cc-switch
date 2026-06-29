@@ -109,6 +109,7 @@ function createCatalogRow(seed?: Partial<CodexCatalogModel>): CodexCatalogRow {
     ...(seed?.baseInstructions
       ? { baseInstructions: seed.baseInstructions }
       : {}),
+    ...(seed?.fastMode === true ? { fastMode: true } : {}),
   };
 }
 
@@ -132,7 +133,8 @@ function catalogRowsMatchModels(
         (incoming.supportsParallelToolCalls ?? null) &&
       (row.baseInstructions ?? "") === (incoming.baseInstructions ?? "") &&
       JSON.stringify(row.inputModalities ?? []) ===
-        JSON.stringify(incoming.inputModalities ?? [])
+        JSON.stringify(incoming.inputModalities ?? []) &&
+      (row.fastMode === true) === (incoming.fastMode === true)
     );
   });
 }
@@ -228,7 +230,10 @@ export function CodexFormFields({
   useEffect(() => {
     if (!onCatalogModelsChange) return;
     const next: CodexCatalogModel[] = catalogRows.map(
-      ({ rowId: _rowId, ...rest }) => rest,
+      ({ rowId: _rowId, fastMode, ...rest }) => ({
+        ...rest,
+        ...(fastMode === true ? { fastMode: true } : {}),
+      }),
     );
     // 只有当数据真的变化时才通知父组件
     if (catalogRowsMatchModels(catalogRows, lastSentModelsRef.current)) return;
@@ -566,7 +571,7 @@ export function CodexFormFields({
                 {catalogRows.length > 0 && (
                   <div className="space-y-2">
                     {/* 列头：md+ 显示 */}
-                    <div className="hidden grid-cols-[1fr_1fr_140px_36px] gap-2 px-1 text-xs font-medium text-muted-foreground md:grid">
+                    <div className="hidden grid-cols-[1fr_1fr_140px_132px_36px] gap-2 px-1 text-xs font-medium text-muted-foreground md:grid">
                       <span>
                         {t("codexConfig.catalogColumnDisplay", {
                           defaultValue: "菜单显示名",
@@ -582,13 +587,23 @@ export function CodexFormFields({
                           defaultValue: "上下文窗口",
                         })}
                       </span>
+                      <span
+                        title={t("codexConfig.modelCatalogFastModeHint", {
+                          defaultValue:
+                            "开启后，该模型在 Codex 模型目录中声明 fast/priority 服务层。仅在上游支持时使用。",
+                        })}
+                      >
+                        {t("codexConfig.modelCatalogFastMode", {
+                          defaultValue: "FAST mode",
+                        })}
+                      </span>
                       <span />
                     </div>
 
                     {catalogRows.map((row, index) => (
                       <div
                         key={row.rowId}
-                        className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_140px_36px]"
+                        className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_140px_132px_36px]"
                       >
                         <Input
                           value={row.displayName ?? ""}
@@ -663,6 +678,28 @@ export function CodexFormFields({
                             defaultValue: "上下文窗口",
                           })}
                         />
+                        <div className="flex h-9 items-center justify-between gap-3 rounded-md border border-border-default px-3 md:justify-start md:border-0 md:px-0">
+                          <span className="text-sm text-muted-foreground md:hidden">
+                            {t("codexConfig.modelCatalogFastMode", {
+                              defaultValue: "FAST mode",
+                            })}
+                          </span>
+                          <Switch
+                            checked={row.fastMode === true}
+                            onCheckedChange={(checked) =>
+                              handleUpdateCatalogRow(index, {
+                                fastMode: checked,
+                              })
+                            }
+                            aria-label={t("codexConfig.modelCatalogFastMode", {
+                              defaultValue: "FAST mode",
+                            })}
+                            title={t("codexConfig.modelCatalogFastModeHint", {
+                              defaultValue:
+                                "开启后，该模型在 Codex 模型目录中声明 fast/priority 服务层。仅在上游支持时使用。",
+                            })}
+                          />
+                        </div>
                         <Button
                           type="button"
                           variant="ghost"

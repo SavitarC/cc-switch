@@ -1292,6 +1292,8 @@
     "catalogColumnDisplay": "Menu Display Name",
     "catalogColumnModel": "Actual Request Model",
     "catalogColumnContext": "Context Window",
+    "modelCatalogFastMode": "FAST mode",
+    "modelCatalogFastModeHint": "When enabled, this model declares the fast/priority service tier in the Codex model catalog. Use only when the upstream supports it.",
     "reasoningModeToggle": "Supports Thinking Mode",
     "reasoningModeHint": "Enable when the upstream Chat Completions API supports toggling thinking on/off. Providers like Kimi, GLM and Qwen usually fall into this category.",
     "reasoningEffortToggle": "Supports Reasoning Effort",

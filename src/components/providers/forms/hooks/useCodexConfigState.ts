@@ -109,6 +109,9 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
                 : {}),
               ...(inputModalities ? { inputModalities } : {}),
               ...(baseInstructions ? { baseInstructions } : {}),
+              ...(item?.fastMode === true || item?.fast_mode === true
+                ? { fastMode: true }
+                : {}),
             };
           })
           .filter((item: CodexCatalogModel) => item.model.trim()),

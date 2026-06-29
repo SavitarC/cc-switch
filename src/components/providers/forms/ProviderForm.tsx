@@ -188,6 +188,7 @@ export const normalizeCodexCatalogModelsForSave = (
         ? { inputModalities }
         : {}),
       ...(baseInstructions ? { baseInstructions } : {}),
+      ...(item.fastMode === true ? { fastMode: true } : {}),
     });
   }
 

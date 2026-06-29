@@ -1292,6 +1292,8 @@
     "catalogColumnDisplay": "菜单显示名",
     "catalogColumnModel": "实际请求模型",
     "catalogColumnContext": "上下文窗口",
+    "modelCatalogFastMode": "FAST mode",
+    "modelCatalogFastModeHint": "开启后，该模型在 Codex 模型目录中声明 fast/priority 服务层。仅在上游支持时使用。",
     "reasoningModeToggle": "支持思考模式",
     "reasoningModeHint": "上游 Chat Completions 接口支持开启或关闭 thinking 时启用。Kimi、GLM、Qwen 等通常属于这一类。",
     "reasoningEffortToggle": "支持思考等级",

@@ -418,6 +418,29 @@ fn extract_codex_top_level_u64(config_text: &str, field: &str) -> Option<u64> {
         .filter(|value| *value > 0)
 }
 
+fn codex_catalog_entry_has_fast_mode(entry: &Value) -> bool {
+    let has_fast_speed_tier = entry
+        .get("additional_speed_tiers")
+        .and_then(|value| value.as_array())
+        .is_some_and(|tiers| {
+            tiers
+                .iter()
+                .any(|tier| tier.as_str().is_some_and(|tier| tier == "fast"))
+        });
+    let has_priority_service_tier = entry
+        .get("service_tiers")
+        .and_then(|value| value.as_array())
+        .is_some_and(|tiers| {
+            tiers.iter().any(|tier| {
+                tier.get("id")
+                    .and_then(|value| value.as_str())
+                    .is_some_and(|id| id == "priority")
+            })
+        });
+
+    has_fast_speed_tier || has_priority_service_tier
+}
+
 fn codex_catalog_model_entry(
     template: &Value,
     spec: &CodexCatalogModelSpec,
@@ -435,8 +458,35 @@ fn codex_catalog_model_entry(
     entry_obj.insert("context_window".to_string(), json!(spec.context_window));
     entry_obj.insert("max_context_window".to_string(), json!(spec.context_window));
     entry_obj.insert("priority".to_string(), json!(1000 + priority));
-    entry_obj.insert("additional_speed_tiers".to_string(), json!([]));
-    entry_obj.insert("service_tiers".to_string(), json!([]));
+    if spec.fast_mode {
+        entry_obj.insert(
+            "additional_speed_tiers".to_string(),
+            template
+                .get("additional_speed_tiers")
+                .filter(|value| value.is_array())
+                .cloned()
+                .unwrap_or_else(|| json!(["fast"])),
+        );
+        entry_obj.insert(
+            "service_tiers".to_string(),
+            template
+                .get("service_tiers")
+                .filter(|value| value.is_array())
+                .cloned()
+                .unwrap_or_else(|| {
+                    json!([
+                        {
+                            "id": "priority",
+                            "name": "Fast",
+                            "description": "1.5x speed, increased usage"
+                        }
+                    ])
+                }),
+        );
+    } else {
+        entry_obj.insert("additional_speed_tiers".to_string(), json!([]));
+        entry_obj.insert("service_tiers".to_string(), json!([]));
+    }
     entry_obj.insert("availability_nux".to_string(), Value::Null);
     entry_obj.insert("upgrade".to_string(), Value::Null);
 
@@ -497,6 +547,7 @@ struct CodexCatalogModelSpec {
     /// back to the template default when absent. Only consulted for
     /// `NativeResponses`.
     base_instructions: Option<String>,
+    fast_mode: bool,
 }
 
 fn codex_catalog_model_specs(settings: &Value, config_text: &str) -> Vec<CodexCatalogModelSpec> {
@@ -540,6 +591,11 @@ fn codex_catalog_model_specs(settings: &Value, config_text: &str) -> Vec<CodexCa
                 .or_else(|| model_config.get("context_window")),
         )
         .unwrap_or(default_context_window);
+        let fast_mode = model_config
+            .get("fastMode")
+            .or_else(|| model_config.get("fast_mode"))
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
 
         let supports_parallel_tool_calls = model_config
             .get("supportsParallelToolCalls")
@@ -573,6 +629,7 @@ fn codex_catalog_model_specs(settings: &Value, config_text: &str) -> Vec<CodexCa
             supports_parallel_tool_calls,
             input_modalities,
             base_instructions,
+            fast_mode,
         });
     }
 
@@ -1097,6 +1154,9 @@ fn build_simplified_catalog_from_texts(config_text: &str, catalog_text: &str) ->
             if !mods.is_empty() {
                 obj.insert("inputModalities".to_string(), json!(mods));
             }
+        }
+        if codex_catalog_entry_has_fast_mode(entry) {
+            obj.insert("fastMode".to_string(), json!(true));
         }
 
         entries.push(Value::Object(obj));
@@ -2376,6 +2436,11 @@ base_url = "https://production.api/v1"
             Some(&json!([])),
             "generated third-party entries should not inherit OpenAI speed tiers"
         );
+        assert_eq!(
+            models[0].get("service_tiers"),
+            Some(&json!([])),
+            "generated third-party entries should not inherit OpenAI service tiers by default"
+        );
         assert!(
             models[0]
                 .get("availability_nux")
@@ -2387,7 +2452,7 @@ base_url = "https://production.api/v1"
     #[test]
     fn native_responses_profile_suppresses_apply_patch_and_keeps_shell() {
         // Native (direct) /responses providers must NOT emit a freeform
-        // apply_patch (type=="custom") tool — gateways like MiMo reject it.
+        // apply_patch (type=="custom") tool - gateways like MiMo reject it.
         // The native profile uses the bundled clean template and relies on
         // shell_type="shell_command" for edits, plus per-row overrides.
         let settings = json!({
@@ -2428,7 +2493,7 @@ base_url = "https://production.api/v1"
             "native entries must NOT declare a freeform apply_patch tool"
         );
         // `base_instructions` is REQUIRED by Codex's catalog parser, so it must
-        // be present — and the per-row official override must win over the
+        // be present - and the per-row official override must win over the
         // template default.
         assert_eq!(
             entry.get("base_instructions").and_then(|v| v.as_str()),
@@ -2452,6 +2517,59 @@ base_url = "https://production.api/v1"
         assert_eq!(
             entry.get("context_window").and_then(|v| v.as_u64()),
             Some(1_000_000)
+        );
+    }
+
+    #[test]
+    fn codex_model_catalog_emits_fast_tiers_per_model() {
+        let template = json!({
+            "slug": "gpt-5.5",
+            "display_name": "GPT-5.5",
+            "description": "Frontier model",
+            "additional_speed_tiers": ["fast"],
+            "service_tiers": [
+                {
+                    "id": "priority",
+                    "name": "Fast",
+                    "description": "1.5x speed, increased usage"
+                }
+            ],
+            "availability_nux": { "message": "GPT-5.5 is now available." },
+            "upgrade": { "target": "gpt-5.5" },
+            "context_window": 272000,
+            "max_context_window": 272000
+        });
+        let settings = json!({
+            "modelCatalog": {
+                "models": [
+                    { "model": "standard-model" },
+                    { "model": "fast-model", "fastMode": true }
+                ]
+            }
+        });
+
+        let specs = codex_catalog_model_specs(&settings, "");
+        let catalog =
+            codex_model_catalog_from_specs(&specs, &template, CodexCatalogToolProfile::ProxyChat);
+        let models = catalog
+            .get("models")
+            .and_then(|value| value.as_array())
+            .expect("models should be an array");
+
+        assert_eq!(models[0].get("additional_speed_tiers"), Some(&json!([])));
+        assert_eq!(models[0].get("service_tiers"), Some(&json!([])));
+        assert_eq!(
+            models[1].get("additional_speed_tiers"),
+            Some(&json!(["fast"]))
+        );
+        assert!(
+            models[1]
+                .get("service_tiers")
+                .and_then(|value| value.as_array())
+                .is_some_and(|tiers| tiers.iter().any(|tier| {
+                    tier.get("id").and_then(|value| value.as_str()) == Some("priority")
+                })),
+            "fast mode should copy the priority service tier"
         );
     }
 
@@ -2495,6 +2613,7 @@ base_url = "https://production.api/v1"
             supports_parallel_tool_calls: None,
             input_modalities: None,
             base_instructions: None,
+            fast_mode: false,
         }];
         // Using a gpt-5.5-shaped template under ProxyChat must NOT strip
         // apply_patch_tool_type. (The native template lacks it, so synthesize
@@ -2513,6 +2632,66 @@ base_url = "https://production.api/v1"
             Some("freeform"),
             "ProxyChat must preserve apply_patch_tool_type (no native stripping)"
         );
+    }
+
+    #[test]
+    fn codex_model_catalog_fast_mode_uses_static_fallback_when_template_lacks_tiers() {
+        let template = json!({
+            "slug": "gpt-5.5",
+            "display_name": "GPT-5.5",
+            "description": "Frontier model",
+            "context_window": 272000,
+            "max_context_window": 272000
+        });
+        let settings = json!({
+            "modelCatalog": {
+                "models": [
+                    { "model": "fast-model", "fastMode": true }
+                ]
+            }
+        });
+
+        let specs = codex_catalog_model_specs(&settings, "");
+        let catalog =
+            codex_model_catalog_from_specs(&specs, &template, CodexCatalogToolProfile::ProxyChat);
+        let model = catalog
+            .get("models")
+            .and_then(|value| value.as_array())
+            .and_then(|models| models.first())
+            .expect("model entry");
+
+        assert_eq!(model.get("additional_speed_tiers"), Some(&json!(["fast"])));
+        assert_eq!(
+            model
+                .get("service_tiers")
+                .and_then(|value| value.as_array())
+                .and_then(|tiers| tiers.first())
+                .and_then(|tier| tier.get("id"))
+                .and_then(|value| value.as_str()),
+            Some("priority")
+        );
+    }
+
+    #[test]
+    fn codex_catalog_model_specs_reads_fast_mode_aliases() {
+        let settings = json!({
+            "modelCatalog": {
+                "models": [
+                    { "model": "camel", "fastMode": true },
+                    { "model": "snake", "fast_mode": true },
+                    { "model": "ignored-string", "fastMode": "true" },
+                    { "model": "unset" }
+                ]
+            }
+        });
+
+        let specs = codex_catalog_model_specs(&settings, "");
+
+        assert_eq!(specs.len(), 4);
+        assert!(specs[0].fast_mode);
+        assert!(specs[1].fast_mode);
+        assert!(!specs[2].fast_mode);
+        assert!(!specs[3].fast_mode);
     }
 
     #[test]
@@ -2765,6 +2944,48 @@ web_search = "disabled"
         assert_eq!(
             models[1].get("contextWindow").and_then(|v| v.as_u64()),
             Some(500_000)
+        );
+    }
+
+    #[test]
+    fn build_simplified_catalog_outputs_fast_mode_only_when_enabled() {
+        let catalog = r#"{
+            "models": [
+                {
+                    "slug": "speed-tier-model",
+                    "display_name": "speed-tier-model",
+                    "additional_speed_tiers": ["fast"],
+                    "service_tiers": []
+                },
+                {
+                    "slug": "priority-tier-model",
+                    "display_name": "priority-tier-model",
+                    "additional_speed_tiers": [],
+                    "service_tiers": [{ "id": "priority", "name": "Fast" }]
+                },
+                {
+                    "slug": "standard-model",
+                    "display_name": "standard-model",
+                    "additional_speed_tiers": [],
+                    "service_tiers": []
+                }
+            ]
+        }"#;
+
+        let result = build_simplified_catalog_from_texts("", catalog).expect("entries");
+        let models = result.get("models").unwrap().as_array().unwrap();
+
+        assert_eq!(
+            models[0].get("fastMode").and_then(|value| value.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            models[1].get("fastMode").and_then(|value| value.as_bool()),
+            Some(true)
+        );
+        assert!(
+            models[2].get("fastMode").is_none(),
+            "disabled fast mode should not be serialized"
         );
     }
 

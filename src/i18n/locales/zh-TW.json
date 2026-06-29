@@ -1256,6 +1256,8 @@
     "catalogColumnDisplay": "選單顯示名",
     "catalogColumnModel": "實際請求模型",
     "catalogColumnContext": "上下文視窗",
+    "modelCatalogFastMode": "FAST mode",
+    "modelCatalogFastModeHint": "開啟後，該模型會在 Codex 模型目錄中宣告 fast/priority 服務層。僅在上游支援時使用。",
     "catalogDisplayNamePlaceholder": "例如: DeepSeek V4 Flash",
     "catalogModelPlaceholder": "例如: deepseek-v4-flash",
     "contextWindow": "上下文視窗",

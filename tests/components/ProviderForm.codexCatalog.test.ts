@@ -5,14 +5,28 @@ describe("ProviderForm Codex catalog helpers", () => {
   it("normalizes catalog rows and removes empty or duplicate models", () => {
     expect(
       normalizeCodexCatalogModelsForSave([
-        { model: " deepseek-v4-flash ", displayName: " DeepSeek " },
-        { model: "deepseek-v4-flash", displayName: "Duplicate" },
-        { model: "", displayName: "Empty" },
+        {
+          model: " deepseek-v4-flash ",
+          displayName: " DeepSeek ",
+          fastMode: true,
+        },
+        {
+          model: "deepseek-v4-flash",
+          displayName: "Duplicate",
+          fastMode: false,
+        },
+        { model: "", displayName: "Empty", fastMode: true },
         { model: "kimi-k2", contextWindow: "128000 tokens" },
+        { model: "glm-5", fastMode: false },
       ]),
     ).toEqual([
-      { model: "deepseek-v4-flash", displayName: "DeepSeek" },
+      {
+        model: "deepseek-v4-flash",
+        displayName: "DeepSeek",
+        fastMode: true,
+      },
       { model: "kimi-k2", contextWindow: 128000 },
+      { model: "glm-5" },
     ]);
   });
 
