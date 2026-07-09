@@ -77,6 +77,13 @@ export const iconMetadata: Record<string, IconMetadata> = {
     keywords: ["qwen", "tongyi"],
     defaultColor: "#FF6A00",
   },
+  amux: {
+    name: "amux",
+    displayName: "Amux",
+    category: "ai-provider",
+    keywords: ["amux", "amuxapi", "aggregator", "relay", "gateway", "gpt"],
+    defaultColor: "#000000",
+  },
   anthropic: {
     name: "anthropic",
     displayName: "Anthropic",
@@ -204,6 +211,13 @@ export const iconMetadata: Record<string, IconMetadata> = {
     keywords: ["cloudflare", "cdn"],
     defaultColor: "#F38020",
   },
+  code0: {
+    name: "code0",
+    displayName: "Code0",
+    category: "ai-provider",
+    keywords: ["code0", "code0ai", "aggregator", "relay", "gateway", "gpt"],
+    defaultColor: "#20C050",
+  },
   cohere: {
     name: "cohere",
     displayName: "Cohere",
@@ -253,6 +267,21 @@ export const iconMetadata: Record<string, IconMetadata> = {
       "claude",
       "gpt",
       "gateway",
+    ],
+    defaultColor: "#000000",
+  },
+  teamorouter: {
+    name: "teamorouter",
+    displayName: "TeamoRouter",
+    category: "ai-provider",
+    keywords: [
+      "teamorouter",
+      "teamo",
+      "router",
+      "aggregator",
+      "relay",
+      "gateway",
+      "gpt",
     ],
     defaultColor: "#000000",
   },
@@ -388,6 +417,13 @@ export const iconMetadata: Record<string, IconMetadata> = {
     category: "ai-provider",
     keywords: ["mistral"],
     defaultColor: "#FF7000",
+  },
+  nekocode: {
+    name: "nekocode",
+    displayName: "NekoCode",
+    category: "ai-provider",
+    keywords: ["nekocode", "neko", "aggregator", "relay", "gateway", "gpt"],
+    defaultColor: "#A64BC4",
   },
   newapi: {
     name: "newapi",
