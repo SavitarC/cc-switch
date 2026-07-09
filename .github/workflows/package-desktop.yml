@@ -1,0 +1,141 @@
+name: Package Desktop Apps
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/package-desktop.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'vite.config.ts'
+      - 'tsconfig*.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Package ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple Silicon
+            os: macos-14
+            target: aarch64-apple-darwin
+            artifact-name: cc-switch-macos-apple-silicon
+          - name: Windows
+            os: windows-2022
+            target: default
+            artifact-name: cc-switch-windows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.12.3
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-${{ runner.arch }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-pnpm-store-
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add macOS Apple Silicon target
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin
+
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ matrix.target }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-cargo-${{ matrix.target }}-
+            ${{ runner.os }}-${{ runner.arch }}-cargo-
+
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build macOS Apple Silicon app
+        if: runner.os == 'macOS'
+        run: pnpm tauri build --target aarch64-apple-darwin --config '{"bundle":{"createUpdaterArtifacts":false}}'
+
+      - name: Build Windows app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: pnpm tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
+
+      - name: Collect macOS artifacts
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p package-artifacts
+          bundle_root="src-tauri/target/aarch64-apple-darwin/release/bundle"
+          find "$bundle_root" -type f -name '*.dmg' -print -exec cp {} package-artifacts/ \;
+          app_path=$(find "$bundle_root/macos" -maxdepth 1 -name '*.app' -type d | head -1 || true)
+          if [ -n "$app_path" ]; then
+            ditto -c -k --sequesterRsrc --keepParent "$app_path" package-artifacts/CC-Switch-macOS-Apple-Silicon.app.zip
+          fi
+          if ! find package-artifacts -type f | grep -q .; then
+            echo "No macOS artifacts found under $bundle_root" >&2
+            exit 1
+          fi
+
+      - name: Collect Windows artifacts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path package-artifacts | Out-Null
+          $bundleRoot = 'src-tauri/target/release/bundle'
+          $patterns = @('*.msi', '*.msi.sig', '*.exe', '*.exe.sig')
+          foreach ($pattern in $patterns) {
+            Get-ChildItem -Path $bundleRoot -Recurse -File -Filter $pattern -ErrorAction SilentlyContinue |
+              ForEach-Object { Copy-Item $_.FullName -Destination package-artifacts -Force }
+          }
+          if (-not (Get-ChildItem -Path package-artifacts -File -ErrorAction SilentlyContinue)) {
+            throw "No Windows artifacts found under $bundleRoot"
+          }
+
+      - name: List package artifacts
+        shell: bash
+        run: ls -la package-artifacts
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: package-artifacts/*
+          if-no-files-found: error
